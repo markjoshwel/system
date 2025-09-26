@@ -1,0 +1,13 @@
+emerge-webrsync
+emerge --sync
+
+# default/linux/amd64/23.0/musl/hardened
+eselect profile set 45
+
+emerge sys-apps/musl-locales
+emerge sys-libs/timezone-data
+
+emerge sys-kernel/linux-firmware
+
+# the Ryzen 9 6900HS is a AMD Rembrandt apu
+emerge sys-firmware/sof-firmware
