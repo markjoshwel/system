@@ -1,0 +1,2 @@
+MUSL_LOCPATH="/usr/share/i18n/locales/musl"
+TZ="/usr/share/zoneinfo/Asia/Singapore"
