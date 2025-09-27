@@ -11,3 +11,6 @@ emerge sys-kernel/linux-firmware
 
 # the Ryzen 9 6900HS is a AMD Rembrandt apu
 emerge sys-firmware/sof-firmware
+
+# temp
+emerge sys-kernel/gentoo-kernel-bin
