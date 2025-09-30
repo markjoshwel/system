@@ -1,3 +1,14 @@
-/dev/nvme0n1p1          /efi            vfat            umask=0077,tz=UTC       0 2
-/dev/nvme0n1p5          /               btrfs           defaults,noatime        0 1
-/dev/nvme0n1p6          none            swap            sw              0 0
+# livecd /mnt/gentoo # lsblk -f
+# nvme0n1
+# ├─nvme0n1p1 vfat        FAT32            ESP                  7301-94FE                             941.8M     8% /mnt/gentoo/efi
+# ├─nvme0n1p2                              MSR
+# ├─nvme0n1p3                              Windows
+# ├─nvme0n1p4 ntfs                         WinRE                20A8408F5052D321
+# ├─nvme0n1p5 swap        1                Swap                 05fd15ba-79db-4e2f-8265-1afd09c012a9                [SWAP]
+# ├─nvme0n1p6 crypto_LUKS 2                                     07abad04-6ca3-447e-a3b9-39b132355e8d
+# │ └─root    btrfs                        Linux                4a5e76e7-bbe8-49d5-b854-37673ce2b17e  602.1G     0% /mnt/gentoo
+# └─nvme0n1p7                              Shared
+
+UUUD="7301-94FE"          /efi            vfat            umask=0077,tz=UTC       0 2
+UUID="05fd15ba-79db-4e2f-8265-1afd09c012a9"          none            swap            sw              0 0
+UUID="4a5e76e7-bbe8-49d5-b854-37673ce2b17e"          /               btrfs           defaults,noatime        0 1
