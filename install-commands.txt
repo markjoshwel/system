@@ -1,16 +1,52 @@
+# --- pre-chroot ---
+
+# encrypted rootfs
+shred --verbose --random-source /dev/urandom --iterations 1 /dev/nvme0n1p6
+cryptsetup -c aes-xts-plain64 -s 512 -y luksFormat /dev/nvme0n1p6
+cryptsetup luksOpen /dev/nvme0n1p6 gentoo
+
+# formatting
+mkfs.btrfs -f /dev/mapper/gentoo
+mkswap /dev/nvme0n1p5
+
+# --- (3/10) The hard disks are initialized to host the Gentoo installation. ---
+
+# mounting
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Base#Chrooting
+mount /dev/mapper/gentoo /mnt/gentoo
+mkdir -p /mnt/gentoo/efi
+mount /dev/nvme0n1p1 /mnt/gentoo/efi
+swapon /dev/nvme0n1p5
+
+cp --dereference /etc/resolv.conf /mnt/gentoo/etc/
+
+# --- (4/10) The installation environment is prepared and the user is ready to chroot into the new environment. ---
+
+# --- cut here: chroot ---
+
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Base#Configuring_Portage
 emerge-webrsync
 emerge --sync
 
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Base#Choosing_the_right_profile
 # default/linux/amd64/23.0/musl/hardened
 eselect profile set 45
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Base#Installing_binary_packages
+getuto
 
+# musl stuff
+# https://wiki.gentoo.org/wiki/Musl
 emerge sys-apps/musl-locales
 emerge sys-libs/timezone-data
 
-emerge sys-kernel/linux-firmware
+# --- (5/10) Core packages, which are the same on all Gentoo installations, are installed. ---
+
+emerge sys-kernel/gentoo-sources
+emerge sys-apps/pciutils
 
 # the Ryzen 9 6900HS is a AMD Rembrandt apu
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Kernel#Optional:_Installing_firmware_and.2For_microcode
+emerge sys-kernel/linux-firmware
 emerge sys-firmware/sof-firmware
 
-# temp
-emerge sys-kernel/gentoo-kernel-bin
+# --- (6/10) The Linux kernel is installed. ---
