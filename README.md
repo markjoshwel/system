@@ -6,6 +6,12 @@ my {root,dot,home}files
 .
 ├── README.md
 ├── etc
+│   ├── conf.d
+│   │   └── dmcrypt
+│   ├── dracut.conf.d
+│   │   └── luks.conf
+│   ├── fstab
+│   ├── hostname
 │   └── portage
 │       ├── binrepos.conf
 │       │   └── gentoobinhost.conf
@@ -14,7 +20,13 @@ my {root,dot,home}files
 │       │   └── 02locale
 │       ├── make.conf
 │       └── package.use
-│           └── 00cpuflags
+│           ├── 00cpuflags
+│           └── installkernel
+├── heart
+│   ├── kernel-6.12.41-default.config
+│   ├── kernel-6.12.41-localmodconfig..config
+│   ├── kernel-6.12.41-localyesconfig.config
+│   └── references
 ├── install-commands.txt
 └── set.py
 ```
