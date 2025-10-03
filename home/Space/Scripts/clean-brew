@@ -1,0 +1,10 @@
+#!/bin/sh
+# clean-brew: upgrades and housekeeps stuff installed by homebrew
+
+brew update
+brew upgrade
+brew upgrade --cask -g
+
+brew cleanup -s
+brew autoremove
+brew doctor

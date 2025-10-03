@@ -1,0 +1,6 @@
+#!/bin/sh
+# clean-nix: cleans nix store
+
+nix-collect-garbage
+nix-store --optimise
+nix-store --gc

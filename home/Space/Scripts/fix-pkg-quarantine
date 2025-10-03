@@ -1,0 +1,6 @@
+#!/bin/sh
+# pkg-quarantine: yes macOS, i know i downloaded these from the internet
+
+xattr -d com.apple.quarantine /Applications/LibreWolf.app/
+xattr -d com.apple.quarantine /Applications/Spotify.app/
+xattr -d com.apple.quarantine /Applications/SourceGit.app/

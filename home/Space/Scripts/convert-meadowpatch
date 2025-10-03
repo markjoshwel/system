@@ -1,0 +1,39 @@
+#!/bin/sh
+# convert-meadowpatch: convert 3gp video files in current working directory to
+# mp4 files, if not previously converted
+
+FFMPEG_OPTS="
+  -c:v libx264
+  -profile:v baseline -level 3.0
+  -pix_fmt yuv420p
+  -preset slow
+  -crf 18
+  -vf scale=trunc(iw/2)*2:trunc(ih/2)*2
+  -c:a aac -b:a 128k -ac 2
+  -movflags +faststart
+"
+
+for infile in *.3gp; do
+  # break on literal glob if not found
+  [ ! -e "$infile" ] && break
+
+  # derive the base name (strip the .3gp suffix)
+  stem=${infile%.3gp}
+  outfile="${stem}.mp4"
+
+  # skip if output already exists
+  if [ -e "$outfile" ]; then
+    continue
+  fi
+
+  # run ffmpeg conversion
+  printf 'convert-meadowpatch: converting "%s" → "%s"\n' "$infile" "$outfile"
+  ffmpeg -i "$infile" $FFMPEG_OPTS "$outfile"
+
+  # check for successful conversion
+  if [ $? -eq 0 ]; then
+    printf 'convert-meadowpatch: successfully converted "%s"\n' "$outfile"
+  else
+    printf 'convert-meadowpatch: error converting "%s"\n' "$infile" >&2
+  fi
+done

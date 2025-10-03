@@ -1,0 +1,7 @@
+#!/bin/sh
+# clean-user-cache: clears user cache files, system cache files and the
+# recycle bin are risky because i call this often
+
+rm -rf ~/Library/Caches/*
+rm -rf ~/Library/Logs/*
+rm -rf ~/Library/Application\ Support/CrashReporter/*

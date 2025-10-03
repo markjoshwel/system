@@ -1,0 +1,9 @@
+#!/bin/sh
+# clean: cleans up user and package manager caches
+
+SCRIPT_DIR=$(dirname "$0")
+
+"$SCRIPT_DIR/clean-nix"
+"$SCRIPT_DIR/clean-brew"
+"$SCRIPT_DIR/fix-pkg-quarantine"
+"$SCRIPT_DIR/clean-user-cache"

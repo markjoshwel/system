@@ -1,0 +1,98 @@
+#!/bin/sh
+# nixstall: shorthand to install packages to my nix-on-darwin or nixos system config with interactive confirmation and auto-revert on failure
+
+MAJO_NIXSTALL_TARGET_FILE=${MAJO_NIXSTALL_TARGET_FILE:-"/etc/nix-darwin/flake.nix"}
+MAJO_NIXSTALL_INDENT=${MAJO_NIXSTALL_INDENT:-"          "}
+MAJO_NIXSTALL_MARKER="# insert above"
+
+# check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "nixstall: error: run this script privileged, e.g. with sudo or as root" >&2
+    exit 1
+fi
+
+# check for arguments
+if [ $# -eq 0 ]; then
+    echo "nixstall: usage: $0 [package ...]" >&2
+    exit 1
+fi
+
+# check if target file exists
+if [ ! -f "$MAJO_NIXSTALL_TARGET_FILE" ]; then
+    echo "nixstall: error: target file '$MAJO_NIXSTALL_TARGET_FILE' not found" >&2
+    exit 1
+fi
+
+# check for marker
+if ! grep -qF "$MAJO_NIXSTALL_MARKER" "$MAJO_NIXSTALL_TARGET_FILE"; then
+    echo "nixstall: error: marker '$MAJO_NIXSTALL_MARKER' not found in $MAJO_NIXSTALL_TARGET_FILE" >&2
+    exit 1
+fi
+
+# create temp files
+tmpfile=$(mktemp) || exit 1
+backup=$(mktemp) || exit 1
+found=0
+
+# build new file in temp
+while IFS= read -r line; do
+    if [ "$found" -eq 0 ] && printf '%s' "$line" | grep -Fq "$MAJO_NIXSTALL_MARKER"; then
+        found=1
+        for pkg in "$@"; do
+            printf '%s%s\n' "$MAJO_NIXSTALL_INDENT" "$pkg" >> "$tmpfile"
+        done
+    fi
+    printf '%s\n' "$line" >> "$tmpfile"
+done < "$MAJO_NIXSTALL_TARGET_FILE"
+
+if [ "$found" -eq 0 ]; then
+    echo "nixstall: error: marker not found during insertion" >&2
+    rm -f "$tmpfile" "$backup"
+    exit 1
+fi
+
+# show diff and confirm
+if command -v diff >/dev/null 2>&1; then
+    echo "nixstall: proposed changes:"
+    diff -u "$MAJO_NIXSTALL_TARGET_FILE" "$tmpfile" | less
+else
+    echo "nixstall: review changes in $tmpfile and confirm"
+fi
+
+printf "nixstall: does this look good? (y/n): "
+read -r answer
+case "$answer" in
+    [Yy]*) ;;
+    *)
+        echo "nixstall: aborted, no changes made"
+        rm -f "$tmpfile" "$backup"
+        exit 1
+        ;;
+esac
+
+# backup original and apply changes
+cp "$MAJO_NIXSTALL_TARGET_FILE" "$backup"
+mv "$tmpfile" "$MAJO_NIXSTALL_TARGET_FILE"
+
+# run rebuild as root
+echo "nixstall: rebuilding system configuration..."
+if command -v darwin-rebuild >/dev/null 2>&1; then
+    darwin-rebuild switch
+elif command -v nixos-rebuild >/dev/null 2>&1; then
+    nixos-rebuild switch
+else
+    echo "nixstall: warning: no rebuild command found (darwin-rebuild or nixos-rebuild)" >&2
+    rm -f "$backup"
+    exit 1
+fi
+
+status=$?
+if [ $status -ne 0 ]; then
+    echo "nixstall: rebuild failed (status $status), reverting changes..." >&2
+    mv "$backup" "$MAJO_NIXSTALL_TARGET_FILE"
+    exit $status
+fi
+
+# clean up backup
+echo "nixstall: rebuild succeeded, removing backup..."
+rm -f "$backup"
