@@ -3,7 +3,7 @@
 from pathlib import Path
 from collections.abc import Generator
 from os import getlogin, getenv, makedirs
-from sys import argv
+from sys import orig_argv, stderr
 from typing import Final
 
 ROOT: Final[Path] = Path(__file__).parent
@@ -25,12 +25,6 @@ def iterate_root() -> Generator[Path, None, None]:
         if str(ROOT.joinpath(".git")) in str(file):
             continue
 
-        # # 3. fix up home
-        # # ./home/<file> -> /home/<username>/<file>
-        # if (home := str(ROOT.joinpath("home"))) in str(file):
-        #     yield Path(str(file).replace(home, str(ROOT.joinpath(home, USER))))
-        #     continue
-
         yield file
 
 
@@ -43,7 +37,7 @@ def map_path(file: Path) -> Path:
         return Path(str(file).replace(str(ROOT), PREFIX))
 
 
-def main():
+def set():
     print(
         "system/set",
         f" -> root is {ROOT}",
@@ -59,9 +53,17 @@ def main():
         if not mapped_file.parent.exists():
             makedirs(mapped_file.parent, exist_ok=True)  # mkdir -p
 
-        if "--dry" not in argv:
+        if "--dry" not in orig_argv:
             content = file.read_text(encoding="utf-8")
             _ = mapped_file.write_text(content, encoding="utf-8")
+            
+
+def main():
+    match orig_argv:
+        case [_, "set"]:
+            set()
+        case _:
+            print(f"usage: {orig_argv[0]} {orig_argv[1]} set [--dry]", file=stderr)
 
 
 if __name__ == "__main__":
