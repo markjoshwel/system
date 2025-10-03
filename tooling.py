@@ -1,12 +1,12 @@
 """system/tooling: managing system and user configuration files across different platforms"""
 
-from pathlib import Path
 from collections.abc import Generator
-from os import getlogin, getenv, makedirs, access, W_OK
-from sys import orig_argv, stderr, platform
-from typing import Final
-from subprocess import run, CalledProcessError
+from os import W_OK, access, getenv, getlogin, makedirs
+from pathlib import Path
 from shutil import which
+from subprocess import CalledProcessError, CompletedProcess, run
+from sys import orig_argv, platform, stderr
+from typing import Final
 
 REPO_ROOT: Final[Path] = Path(__file__).parent
 USER: Final[str] = getenv("SYSTEMSET_USER", getlogin())
@@ -182,18 +182,22 @@ def status() -> int:
         exit code (number of differences + missing files + errors)
     """
     # find available hashing tool
-    hash_cmd = None
+    hash_cmd: list[str] = []
     for cmd in ["xxhsum", "sha256sum", "md5sum"]:
         if which(cmd):
-            hash_cmd = cmd
+            hash_cmd = [cmd]
             break
+    else:
+        # none were found, check for nix else error out
+        if which("nix"):
+            hash_cmd = ["nix", "run", "nixpkgs#xxHash"]
 
-    if not hash_cmd:
-        print(
-            "error: no hashing tool found (tried xxhsum, sha256sum, md5sum)",
-            file=stderr,
-        )
-        return 1
+        if not hash_cmd:
+            print(
+                "error: no hashing tool found (tried xxhsum, sha256sum, md5sum)",
+                file=stderr,
+            )
+            return 1
 
     print(
         "system/status",
@@ -208,7 +212,7 @@ def status() -> int:
         """compute hash of a file using the selected hashing tool"""
         try:
             result = run(
-                [hash_cmd, str(file_path)], capture_output=True, text=True, check=True
+                [*hash_cmd, str(file_path)], capture_output=True, text=True, check=True
             )
             # hash output format: "<hash>  <filename>"
             return result.stdout.split()[0]
@@ -259,7 +263,7 @@ def status() -> int:
         f"  - {len(different)} different",
         f"  - {len(missing)} missing",
         f"  - {len(errors)} error(s)",
-        sep="\n"
+        sep="\n",
     )
 
     if different:
@@ -289,7 +293,7 @@ def status() -> int:
         if missing:
             message_parts.append("some files are missing")
 
-        print("\n", ", and ".join(message_parts), "...",sep="")
+        print("\n", ", and ".join(message_parts), "...", sep="")
 
     return len(different) + len(missing) + len(errors)
 
@@ -297,6 +301,100 @@ def status() -> int:
 def sync() -> int:
     print("error: not implemented", file=stderr)
     return 1
+
+
+def update_readme() -> int:
+    """
+    reads in the README.md from the repo root, replaces the first
+    multiline code block with the output of `tree . -aA --gitignore -I ".git/|.*/"`
+
+    uses `nix run nixpkgs.tree -- . -an --gitignore -I ".git/|.*/"`
+    if tree is not installed but nix is
+    """
+    readme_path = REPO_ROOT.joinpath("README.md")
+
+    if not readme_path.exists():
+        print("error: README.md not found", file=stderr)
+        return 1
+
+    # determine which tree command to use
+    tree_cmd: list[str] = []
+    if which("tree"):
+        tree_cmd = ["tree"]
+    elif which("nix"):
+        tree_cmd = [
+            "nix",
+            "run",
+            "nixpkgs#tree",
+            "--",
+        ]
+    else:
+        print("error: neither tree nor nix command found", file=stderr)
+        return 1
+
+    tree_cmd += [".", "-an", "--gitignore", "-I", ".git/|.*/"]
+
+    print(f"system/update-readme\n -> command is `{' '.join(tree_cmd)}`\n")
+
+    # run tree command
+    try:
+        result: CompletedProcess[str] = run(
+            tree_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
+            encoding="utf-8",
+        )
+
+        tree_lines = (
+            # replace U+A0 with space (output quirk of tree)
+            result.stdout.replace(chr(160), " ")
+        ).splitlines()
+
+        # remove the last line (summary like "15 directories, 29 files")
+        if tree_lines and ("director" in tree_lines[-1] or "file" in tree_lines[-1]):
+            tree_lines = tree_lines[:-1]
+
+        # remove trailing empty lines
+        while tree_lines and not tree_lines[-1].strip():
+            _ = tree_lines.pop()
+
+    except Exception as exc:
+        print(f"error: tree command failed: {exc}", file=stderr)
+        return 1
+
+    # read README.md for first and second ``` markers
+    readme_lines: list[str] = readme_path.read_text().splitlines(keepends=True)
+    first_backtick_idx: int | None = None
+    second_backtick_idx: int | None = None
+
+    for i, line in enumerate(readme_lines):
+        if line.strip().startswith("```"):
+            if first_backtick_idx is None:
+                first_backtick_idx = i
+            elif second_backtick_idx is None:
+                second_backtick_idx = i
+                break
+
+    if (first_backtick_idx is None) or (second_backtick_idx is None):
+        print("error: could not find code block delimiters in README.md", file=stderr)
+        return 1
+
+    # build new readme
+    new_readme_lines: list[str] = []
+    new_readme_lines.extend(readme_lines[: first_backtick_idx + 1])
+    new_readme_lines.extend([(line + "\n") for line in tree_lines])
+    new_readme_lines.extend(readme_lines[second_backtick_idx:])
+
+    try:
+        _ = readme_path.write_text("".join(new_readme_lines))
+    except Exception as e:
+        print(f"error: failed to update README.md: {e}", file=stderr)
+        return 1
+
+    print("updated README.md")
+    return 0
 
 
 def main() -> int:
@@ -308,9 +406,11 @@ def main() -> int:
             return status()
         case ["sync"]:
             return sync()
+        case ["update-readme"]:
+            return update_readme()
         case _:
             print(
-                f"usage: {orig_argv[0]} {orig_argv[1]} (set|status|sync) [--dry]",
+                f"usage: {orig_argv[0]} {orig_argv[1]} (set|status|sync|update-readme) [--dry]",
                 file=stderr,
             )
             return 1
