@@ -4,9 +4,15 @@ my {root,dot,home}files
 
 ```text
 .
-├── README.md
+├── @darwin
+│   └── etc
+│       └── nix-darwin
+│           ├── flake.lock
+│           └── flake.nix
+├── chroot.sh
 ├── etc
 │   ├── conf.d
+│   │   ├── .systemsyncdir
 │   │   └── dmcrypt
 │   ├── dracut.conf.d
 │   │   └── luks.conf
@@ -20,15 +26,27 @@ my {root,dot,home}files
 │       │   └── 02locale
 │       ├── make.conf
 │       └── package.use
-│           ├── 00cpuflags
-│           └── installkernel
+│           └── 00cpuflags
 ├── heart
 │   ├── kernel-6.12.41-default.config
-│   ├── kernel-6.12.41-localmodconfig..config
+│   ├── kernel-6.12.41-localmodconfig.config
 │   ├── kernel-6.12.41-localyesconfig.config
+│   ├── kernel-6.12.41-majorette.config
+│   ├── kernel-6.12.41-majorette+localmodconfig.config
 │   └── references
+├── home
+│   └── Space
+│       └── Scripts
+│           ├── clean
+│           ├── clean-brew
+│           ├── clean-nix
+│           ├── clean-user-cache
+│           ├── convert-meadowpatch
+│           ├── fix-pkg-quarantine
+│           └── nixstall
 ├── install-commands.txt
-└── set.py
+├── README.md
+└── tooling.py
 ```
 
 an example of using it whilst installing gentoo:
