@@ -18,10 +18,14 @@
           pkgs.gh
           pkgs.uv
           pkgs.fish
+          pkgs.nushell
           pkgs.python3
           pkgs.ffmpeg
           pkgs.nixd
           pkgs.nil
+          pkgs.git
+          pkgs.git-credential-manager
+          pkgs.xxHash
           # insert above
         ];
 
@@ -43,6 +47,8 @@
     };
   in
   {
+    # Build darwin flake using:
+    # $ darwin-rebuild build --flake .#cspmilkmini
     darwinConfigurations."cspmilkmini" = nix-darwin.lib.darwinSystem {
       modules = [ configuration ];
     };
