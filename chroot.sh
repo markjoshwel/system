@@ -26,7 +26,9 @@ mkdir -p /mnt/gentoo/efi
 mount /dev/nvme0n1p1 /mnt/gentoo/efi
 swapon /dev/nvme0n1p5
 
-cp --dereference /etc/resolv.conf /mnt/gentoo/etc/
+if [ ! -f /mnt/gentoo/etc/resolv.conf ]; then
+    cp --dereference /etc/resolv.conf /mnt/gentoo/etc/
+fi
 
 if command -v arch-chroot >/dev/null 2>&1; then
     echo 'run the following manually:'
