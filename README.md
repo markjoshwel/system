@@ -20,6 +20,10 @@ my {root,dot,home}files
 │               ├── clean-nix
 │               ├── clean-user-cache
 │               └── fix-pkg-quarantine
+├── @linux
+│   └── .gitkeep
+├── @windows
+│   └── .gitkeep
 ├── chroot.sh
 ├── etc
 │   ├── conf.d
@@ -58,5 +62,5 @@ my {root,dot,home}files
 an example of using it whilst installing gentoo:
 
 ```text
-sudo SYSTEMSET_PREFIX="/mnt/gentoo" SYSTEMSET_USER="majo" python3 set.py
+sudo SYSTEMSET_PREFIX="/mnt/gentoo" SYSTEMSET_USER="majo" python3 tooling.py files set
 ```
