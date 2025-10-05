@@ -5,10 +5,14 @@ my {root,dot,home}files
 ```text
 .
 ├── @darwin
-│   └── etc
-│       └── nix-darwin
-│           ├── flake.lock
-│           └── flake.nix
+│   ├── etc
+│   │   └── nix-darwin
+│   │       ├── flake.lock
+│   │       └── flake.nix
+│   └── home
+│       └── Library
+│           └── LaunchAgents
+│               └── co.joshwel.lottedisplayfriend.plist
 ├── chroot.sh
 ├── etc
 │   ├── conf.d
