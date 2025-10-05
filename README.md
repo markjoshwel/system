@@ -10,9 +10,16 @@ my {root,dot,home}files
 │   │       ├── flake.lock
 │   │       └── flake.nix
 │   └── home
-│       └── Library
-│           └── LaunchAgents
-│               └── co.joshwel.lottedisplayfriend.plist
+│       ├── Library
+│       │   └── LaunchAgents
+│       │       └── co.joshwel.lottedisplayfriend.plist
+│       └── Space
+│           └── Scripts
+│               ├── clean
+│               ├── clean-brew
+│               ├── clean-nix
+│               ├── clean-user-cache
+│               └── fix-pkg-quarantine
 ├── chroot.sh
 ├── etc
 │   ├── conf.d
@@ -41,12 +48,7 @@ my {root,dot,home}files
 ├── home
 │   └── Space
 │       └── Scripts
-│           ├── clean
-│           ├── clean-brew
-│           ├── clean-nix
-│           ├── clean-user-cache
 │           ├── convert-meadowpatch
-│           ├── fix-pkg-quarantine
 │           └── nixstall
 ├── install-commands.txt
 ├── README.md
