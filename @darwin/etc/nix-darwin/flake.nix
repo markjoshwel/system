@@ -26,6 +26,7 @@
           pkgs.git
           pkgs.git-credential-manager
           pkgs.xxHash
+          pkgs.starship
           # insert above
         ];
 
