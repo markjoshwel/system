@@ -69,3 +69,32 @@ cp /boot/initramfs-*.img /efi/EFI/Gentoo/initramfs.img
 cp /boot/vmlinuz-* /efi/EFI/Gentoo/vmlinuz
 
 # --- (6/10) The Linux kernel is installed. ---
+
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/System#Network
+emerge net-misc/dhcpcd
+rc-update add dhcpcd default
+rc-service dhcpcd start
+
+# networking
+emerge net-wireless/iw net-wireless/wpa_supplicant
+
+# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Tools
+
+emerge app-admin/sysklogd
+rc-update add sysklogd default
+
+emerge sys-process/fcron
+emerge --config sys-process/fcron
+
+emerge net-misc/chrony
+rc-update add chronyd default
+
+# windows interop (fat32, ntfs)
+emerge sys-fs/dosfstools sys-fs/ntfs3g
+
+# users
+useradd -m -G users,wheel,audio -s /bin/bash majo
+passwd majo
+
+# delete the root password and disable login
+passwd -dl root
