@@ -1,1 +1,2 @@
 sys-kernel/linux-firmware compress-zstd initramfs
+sys-kernel/installkernel ugrd
