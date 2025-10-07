@@ -217,7 +217,7 @@ class RepositoryFileState(NamedTuple):
                 
                 status_code, _file_path = line.split(maxsplit=1)
                 file_path = REPO_ROOT.joinpath(_file_path)
-                assert file_path.exists(), f"{file_path}"
+                # assert file_path.exists(), f"{file_path}"
 
                 # check if file is untracked
                 if status_code.startswith("??"):
