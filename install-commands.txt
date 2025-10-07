@@ -56,6 +56,16 @@ emerge sys-kernel/linux-firmware sys-firmware/sof-firmware
 emerge sys-kernel/ugrd dev-python/zstandard
 emerge sys-fs/cryptsetup sys-fs/btrfs-progs
 
-(cd /usr/src/linux; ugrd --kver `make kernelversion`-majorette)
+# careful!
+rm /boot/System.map*
+rm /boot/config-*
+rm /boot/vmlinuz-*
+rm /boot/initramfs-*
+
+# install kernel
+(cd /usr/src/linux; make install)
+cp /boot/amd-uc.img /efi/EFI/Gentoo/microcode.img  # microcode
+cp /boot/initramfs-*.img /efi/EFI/Gentoo/initramfs.img
+cp /boot/vmlinuz-* /efi/EFI/Gentoo/vmlinuz
 
 # --- (6/10) The Linux kernel is installed. ---
