@@ -20,47 +20,53 @@ my {root,dot,home}files
 │               ├── clean-nix
 │               ├── clean-user-cache
 │               └── fix-pkg-quarantine
-├── @linux
-│   └── .gitkeep
-├── @windows
-│   └── .gitkeep
+├── README.md
 ├── chroot.sh
+├── compile-kernel-chroot.sh
+├── compile-kernel.sh
+├── efi
+│   └── EFI
+│       └── refind
+│           └── refind.conf
 ├── etc
 │   ├── conf.d
-│   │   ├── .systemsyncdir
-│   │   └── dmcrypt
-│   ├── dracut.conf.d
-│   │   └── luks.conf
+│   │   ├── dmcrypt
+│   │   └── hostname
+│   ├── dhcp
+│   │   └── dhclient.conf
+│   ├── doas.conf
 │   ├── fstab
 │   ├── hostname
-│   └── portage
-│       ├── binrepos.conf
-│       │   └── gentoobinhost.conf
-│       ├── env.d
-│       │   ├── 00local
-│       │   └── 02locale
-│       ├── make.conf
-│       └── package.use
-│           └── 00cpuflags
+│   ├── portage
+│   │   ├── binrepos.conf
+│   │   │   └── gentoobinhost.conf
+│   │   ├── env.d
+│   │   │   ├── 00local
+│   │   │   └── 02locale
+│   │   ├── make.conf
+│   │   └── package.use
+│   │       ├── 00cpuflags
+│   │       ├── doas
+│   │       ├── kernel
+│   │       └── networking
+│   └── ugrd
+│       └── config.toml
 ├── heart
 │   ├── kernel-6.12.41-default.config
 │   ├── kernel-6.12.41-localmodconfig.config
 │   ├── kernel-6.12.41-localyesconfig.config
-│   ├── kernel-6.12.41-majorette.config
-│   ├── kernel-6.12.41-majorette+localmodconfig.config
-│   └── references
+│   └── kernel-6.12.41-majorette.config
 ├── home
 │   └── Space
 │       └── Scripts
 │           ├── convert-meadowpatch
 │           └── nixstall
 ├── install-commands.txt
-├── README.md
 └── tooling.py
 ```
 
 an example of using it whilst installing gentoo:
 
 ```text
-sudo MST_PREFIX="/mnt/gentoo" MST_USER="majo" python3 tooling.py files set
+sudo MST_PREFIX="/mnt/gentoo/" MST_USER="majo" python3 tooling.py files set
 ```
