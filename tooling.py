@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# ///
 """mark's system tooling: cross-platform system and user configuration file manager"""
 
 from collections.abc import Generator
@@ -13,7 +16,7 @@ from pathlib import Path
 from platform import system
 from shutil import which
 from subprocess import CompletedProcess, run
-from sys import executable, orig_argv, stderr
+from sys import executable, orig_argv, stderr, version_info
 from typing import (
     Callable,
     Final,
@@ -28,10 +31,10 @@ from typing import (
 from warnings import warn
 
 REPO_ROOT: Final[Path] = Path(__file__).parent
-USER: Final[str] = getenv("SYSTEMSET_USER", getlogin())
+USER: Final[str] = getenv("MST_USER", getlogin())
 _WINDOWS_SYSTEM_ROOT = expandvars("%SystemRoot%")
 PREFIX: Final[str] = getenv(
-    key="SYSTEMSET_PREFIX",
+    key="MST_PREFIX",
     default=(
         (
             str(Path(_WINDOWS_SYSTEM_ROOT).parent)
@@ -52,6 +55,8 @@ LOCKFILE_PATH: Final[Path] = REPO_ROOT.joinpath(".system/system.tooling.lock")
 
 
 ResultType = TypeVar("ResultType")
+PathsWithMessages = dict[Path, str]
+FilesWithMessages = dict["File", str]
 
 
 class Result(NamedTuple, Generic[ResultType]):
@@ -149,6 +154,120 @@ def _p(n: int, word: str) -> str:
     return (word + "s") if (n > 1) else word
 
 
+class RepositoryFileState(NamedTuple):
+    """
+    attributes:
+        `git_hash: str`
+            git hash of latest/current commit
+        `tracked_files: list[Path]`
+            list of tracked files in the repository
+        `modified_files: list[Path]`
+            any tracked files with changes (staged, unstaged, etc) not yet committed
+        `untracked_files: list[Path]`
+            list of untracked files in the repository
+    """
+
+    git_hash: str
+    tracked_files: list[Path]
+    dirty_files: list[Path]
+    untracked_files: list[Path]
+
+    @classmethod
+    def from_repo(cls, repo: Path = REPO_ROOT) -> Result["RepositoryFileState"]:
+        try:
+            # get current git commit hash
+            hash_result = run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            current_git_hash = hash_result.stdout.strip()
+
+            # get tracked files
+            tracked_result = run(
+                ["git", "ls-files"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            tracked_files = [
+                repo.joinpath(line.strip())
+                for line in tracked_result.stdout.strip().split("\n")
+                if line.strip()
+            ]
+
+            # get status for modified and untracked files
+            status_result = run(
+                ["git", "status", "--porcelain"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            dirty_files: list[Path] = []
+            untracked_files: list[Path] = []
+
+            for line in status_result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                
+                status_code, _file_path = line.split(maxsplit=1)
+                file_path = REPO_ROOT.joinpath(_file_path)
+                assert file_path.exists(), f"{file_path}"
+
+                # check if file is untracked
+                if status_code.startswith("??"):
+                    untracked_files.append(file_path)
+                # any other status code means it's a tracked file with modifications
+                else:
+                    dirty_files.append(file_path)
+
+            return Result(
+                value=cls(
+                    git_hash=current_git_hash,
+                    tracked_files=tracked_files,
+                    dirty_files=dirty_files,
+                    untracked_files=untracked_files,
+                ),
+                error=None,
+            )
+
+        except Exception as e:
+            return Result(
+                value=cls(
+                    git_hash="",
+                    tracked_files=[],
+                    dirty_files=[],
+                    untracked_files=[],
+                ),
+                error=e,
+            )
+
+
+def meta__rfs_test() -> int:
+    repofs = RepositoryFileState.from_repo().get()
+    print("RepositoryFileState(")
+    print(f"    git_hash={repofs.git_hash!r},")
+    print("    tracked_files=[")
+    for file_path in repofs.tracked_files:
+        print(f"        {file_path!r},")
+    print("    ],")
+    print("    dirty_files=[")
+    for file_path in repofs.dirty_files:
+        print(f"        {file_path!r},")
+    print("    ],")
+    print("    untracked_files=[")
+    for file_path in repofs.untracked_files:
+        print(f"        {file_path!r},")
+    print("    ],")
+    print(")")
+    return 0
+
+
 class MSTLockedFileData(TypedDict):
     mtime: float
     checksum: str
@@ -161,8 +280,13 @@ _DefaultMSTLockedFileData = MSTLockedFileData(
     corresponding_git_hash="",
 )
 
-
 MSTLockfileDictType = dict[Path, MSTLockedFileData]
+
+
+class MSTLockfileVerificationResult(NamedTuple):
+    dangling: PathsWithMessages = {}
+    missing: PathsWithMessages = {}
+    unresolved: PathsWithMessages = {}
 
 
 class MSTLockfile(MSTLockfileDictType):
@@ -238,7 +362,8 @@ class MSTLockfile(MSTLockfileDictType):
 
     @classmethod
     def load_from_repo(
-        cls, prune_dangling_entries: bool = True
+        cls,
+        prune_dangling_entries: bool = True,
     ) -> tuple["MSTLockfile", MSTLockfileDictType]:
         """
         loads the MSTLockfile object from the repository,
@@ -295,6 +420,58 @@ class MSTLockfile(MSTLockfileDictType):
 
         return written
 
+    @_result_wrap(default=MSTLockfileVerificationResult())
+    def verify(
+        self,
+        files: list["File"],
+    ) -> MSTLockfileVerificationResult:
+        """
+        verifies that:
+
+        1. there are no dangling entries
+        2. all given files are in the lockfile
+
+        returns: `tuple[list[str], list[str], list[str]]`
+            list of dangling, missing and unresolved entry messages
+        """
+        results = MSTLockfileVerificationResult()
+
+        # 1. verify that there are no dangling entries
+        removed_entries = self.prune_dangling_entries()
+        if removed_entries:
+            for file_path, _ in removed_entries.items():
+                results.dangling[file_path] = f"pruned dangling entry for '{file_path}'"
+
+        # 2. verify that all given files are in the lockfile
+        for file in files:
+            if file.path not in self:
+                results.missing[file.path] = f"missing entry for '{file}'"
+
+        # 3. verify that all lockfile entries have no missing data
+        for file_path, entry in self.items():
+            if "mtime" not in entry:
+                results.unresolved[file_path] = f"missing 'mtime' for '{file_path}'"
+            elif entry["mtime"] == 0.0:
+                results.unresolved[file_path] = f"unresolved 'mtime' for '{file_path}'"
+
+            if "checksum" not in entry:
+                results.unresolved[file_path] = f"missing 'checksum' for '{file_path}'"
+            elif entry["checksum"] == "":
+                results.unresolved[file_path] = (
+                    f"unresolved 'checksum' for '{file_path}'"
+                )
+
+            if "corresponding_git_hash" not in entry:
+                results.unresolved[file_path] = (
+                    f"missing 'corresponding_git_hash' for '{file_path}'"
+                )
+            elif entry["corresponding_git_hash"] == "":
+                results.unresolved[file_path] = (
+                    f"unresolved 'corresponding_git_hash' for '{file_path}'"
+                )
+
+        return results
+
 
 @dataclass
 class File:
@@ -335,18 +512,18 @@ class File:
     @_result_wrap(default=0.0)
     def resolve_mtime(self) -> float:
         """resolves and sets the mtime (modification time) from the file's path"""
-        if self.mtime == 0:
+        if self.mtime == 0.0:
             self.mtime = self.path.stat().st_mtime
         return self.mtime
 
     @_result_wrap(default="")
     def resolve_corresponding_git_hash(
         self,
+        repofs: RepositoryFileState | None = None,
     ) -> str:
         """
-        files can only resolve its own git hash if
-        `str(REPO_ROOT) is in str(self.path)`, and that it is not within the list
-        of files produced by `_resolve_dirty_files()`
+        files can only resolve its own git hash if in the repository,
+        and that it is not dirty
 
         satisfaction of that condition asserts that:
 
@@ -354,56 +531,81 @@ class File:
         2. thus purposing it as a a virtual file
         3. and is tracked by repo's vcs
 
-        real files can not have their hashes resolved, and will only be set:
-
-        - during operation of the files set or files sync command
-        - when their contents are overwritten or matched with a virtual file
-        - of which has a resolvable git hash as long as:
-            - the virtual file is not dirty as per the repo root's vcs
+        real files can not have their hashes resolved, and will only be set
+        during the operation of `files sync` or `files set`
         """
-        warn("resolve_corresponding_git_hash: not implemented", RuntimeWarning)  # TODO
+
+        if str(REPO_ROOT) not in str(self.path):
+            self.corresponding_git_hash = ""
+            return self.corresponding_git_hash
+
+        if repofs is None:
+            repofs = RepositoryFileState.from_repo().get()
+
+        if self.path in repofs.tracked_files:
+            self.corresponding_git_hash = repofs.git_hash
+
+        if self.path in repofs.untracked_files:
+            raise Exception(
+                f"file '{self.path}' is untracked, add and commit it to the repository"
+            )
+
+        if self.path in repofs.dirty_files:
+            raise Exception(
+                f"file '{self.path}' is dirty, commit its changes to the repository"
+            )
+        
+        # debugging lol
+        # print(
+        #     f"\n\t'{self.path}'"
+        #     + f"\n\t ... {str(REPO_ROOT) in str(self.path)=}"
+        #     + f"\n\t ... {self.path in repofs.tracked_files=}"
+        #     + f"\n\t ... {self.path in repofs.dirty_files=}"
+        #     + f"\n\t ... {self.path in repofs.untracked_files=}"
+        # )
+
         return self.corresponding_git_hash
 
     @_result_wrap(default=None)
-    def resolve(self) -> None:
-        mtime_result = self.resolve_mtime()
-        self.mtime = mtime_result.get()
-
-        hash_result = self.resolve_checksum()
-        self.checksum = hash_result.get()
-
-        git_hash_result = self.resolve_corresponding_git_hash()
-        self.corresponding_git_hash = git_hash_result.get()
+    def resolve(self, repofs: RepositoryFileState | None = None) -> None:
+        _ = self.resolve_mtime().get()
+        _ = self.resolve_checksum().get()
+        _ = self.resolve_corresponding_git_hash(repofs).get()
 
     @_result_wrap(default=_DefaultMSTLockedFileData)
-    def dump_single_lock_data(self) -> MSTLockedFileData:
+    def dump_single_lock_data(self, repofs: RepositoryFileState | None = None) -> MSTLockedFileData:
         """dumps the lock data for the file into a single
         MSTLockedFileData-shaped dict"""
-        if any(
-            [self.mtime == 0, self.checksum == "", self.corresponding_git_hash == ""]
-        ):
-            _ = self.resolve().cry()
+        _ = self.resolve(repofs).cry()
 
-        return {
-            "mtime": self.mtime,
-            "checksum": self.checksum,
-            "corresponding_git_hash": self.corresponding_git_hash,
-        }
+        return MSTLockedFileData(
+            mtime=self.mtime,
+            checksum=self.checksum,
+            corresponding_git_hash=self.corresponding_git_hash,
+        )
 
-    def load_single_lock_data(self, data: MSTLockedFileData) -> None:
+    def load_single_lock_data(self, data: MSTLockedFileData, safe: bool = True) -> None:
         """loads the lock data for the file from a single
         MSTLockedFileData-shaped dict"""
-        self.locked_mtime = data["mtime"]
-        self.locked_checksum = data["checksum"]
-        self.locked_corresponding_git_hash = data["corresponding_git_hash"]
+        if safe:
+            self.locked_mtime = data.get("mtime", 0.0)
+            self.locked_checksum = data.get("checksum", "")
+            self.locked_corresponding_git_hash = data.get("corresponding_git_hash", "")
+        else:
+            self.locked_mtime = data["mtime"]
+            self.locked_checksum = data["checksum"]
+            self.locked_corresponding_git_hash = data["corresponding_git_hash"]
 
-    def load_from_lockfile(self, lockfile: MSTLockfile) -> None:
+    def load_from_lockfile(self, lockfile: MSTLockfile, fail: bool = True) -> None:
         """
         loads the lock data for the file from a MSTLockfile-shaped dict
         holding multiple MSTLockedFileData-shaped dict values
         """
         if self.path not in lockfile:
-            raise KeyError(f"file `{self.path}` not found in lockfile")
+            if fail:
+                raise KeyError(f"file `{self.path}` not found in lockfile")
+            else:
+                return
         self.load_single_lock_data(lockfile[self.path])
 
 
@@ -531,9 +733,32 @@ class MSTFileManager:
                 self._map_virtual_path(virt_file)
             )
 
+    @_result_wrap(default=FilesWithMessages())
+    def mass_resolve_corresponding_git_hashes(self, repofs: RepositoryFileState) -> FilesWithMessages:
+        errors: FilesWithMessages = {}
 
+        for virt_file in self.virt_real_mapping:
+            if not (result := virt_file.resolve_corresponding_git_hash(repofs)):
+                errors[virt_file] = result.cry(string=True)
+
+        return errors
+
+    def as_list(self) -> list[File]:
+        """returns a list of all virtual and real files"""
+        _list: list[File] = []
+        for virt_file, real_file in self.virt_real_mapping.items():
+            _list.append(virt_file)
+            _list.append(real_file)
+        return _list
+
+
+# TODO: allow setting files individually
 def files__set() -> int:
     """
+    usage: files set [target ...]
+    
+    target can be a path or a glob pattern, omit to set all files
+    
     copies all virtual repository files to their mapped real system
     locations
 
@@ -550,17 +775,54 @@ def files__set() -> int:
         file=stderr,
     )
 
-    errors: list[tuple[Path, Path, str]] = []
     files = MSTFileManager()
+    
+    lockfile = MSTLockfile()
+    if (LOCKFILE_PATH.exists() and LOCKFILE_PATH.is_file()):
+        lockfile, _ = MSTLockfile.load_from_repo()
+    
+    repofs: RepositoryFileState | None = None
+    try:
+        repofs = RepositoryFileState.from_repo().get()
+    except Exception as exc:
+        print(f"warning: could not load repository file state: {exc} ({exc.__class__.__name__})", file=stderr)
+
+    errors: list[tuple[Path, Path, str]] = []
+    files_set: int = 0
+    
+    target_string_list: list[str] = [f for f in orig_argv[4:] if not f.startswith("-")] if len(orig_argv) > 4 else []  # TODO
+    target_path_list: list[Path] = []
+    target_potential_glob_list: list[str] = []
+    
+    if target_string_list:
+        for target_str in target_string_list:
+            target_path = Path(target_str)
+            if target_path.exists():
+                target_path_list.append(target_path.resolve())
+            else:
+                target_potential_glob_list.append(target_str)
 
     for virt_file, real_file in files.virt_real_mapping.items():
         virt_file_path, real_file_path = virt_file.path, real_file.path
+        
+        is_target: bool = False if target_string_list else True
+        if target_string_list:
+            for target_path in target_path_list:
+                if virt_file_path.resolve() == target_path.resolve():
+                    is_target = True
+                    break
+            
+            for target_glob in target_potential_glob_list:
+                if virt_file_path.full_match(target_glob):
+                    is_target = True
+                    break
+        
+        if not is_target:
+            continue
 
         if "--yes" not in orig_argv:
             print(
-                " ...",
-                real_file_path,
-                "(skipped)",
+                f" ... {virt_file_path.relative_to(REPO_ROOT)} -> {real_file_path} (skipped)",
                 file=stderr,
             )
             continue
@@ -587,45 +849,45 @@ def files__set() -> int:
             if real_file_path.exists() and not access(real_file_path, W_OK):
                 raise PermissionError(f"no write permission for {real_file_path}")
 
+            # set file content
             content = virt_file_path.read_bytes()
             _ = real_file_path.write_bytes(content)
-            print(" >>>", real_file_path, "(ok)", file=stderr)
+            files_set += 1
 
         except Exception as exc:
-            print(" !!!", real_file_path, f"(error: {exc})", file=stderr)
+            print(f" !!! {virt_file_path.relative_to(REPO_ROOT)} -> {real_file_path} (error: {exc})", file=stderr)
             errors.append((virt_file_path, real_file_path, str(exc)))
+        
+        print(f" >>> {virt_file_path.relative_to(REPO_ROOT)} -> {real_file_path} (ok)", file=stderr)
+        
+        # update lockfile
+        # try:
+        #     virt_file.load_from_lockfile(lockfile)
+        #     virt_file_is_unmodified = ((virt_file.locked_mtime != 0.0) and (virt_file.resolve_mtime().get() == virt_file.locked_mtime))
+        #     if virt_file_is_unmodified and (repofs is not None):
+        #         virt_file_virt_file.resolve_corresponding_git_hash(repofs).get()
+        # except Exception as exc:
+        #     errors.append((real_file_path, real_file_path, str(exc)))
 
     # summary
     if errors:
-        print(f"\nfound {len(errors)} error(s) while setting files:", file=stderr)
-        for repo_file, real_file_path, reason in errors:
-            print(f"   - {repo_file.relative_to(REPO_ROOT)} ({reason})", file=stderr)
+        print(
+            f"\nfound {len(errors)} {_p(len(errors), 'error')} while setting files:",
+            file=stderr,
+        )
+        for virt_file_path, real_file_path, reason in errors:
+            if virt_file_path == real_file_path:
+                print(f"   - {virt_file_path.relative_to(REPO_ROOT)} ({reason})", file=stderr)
+            else:
+                print(f"   - {virt_file_path.relative_to(REPO_ROOT)} -> {real_file_path} ({reason})", file=stderr)
+    
+    elif files_set == 0:
+        print("\nno files set")
+    
     else:
         print("\nall files set successfully!")
 
     return len(errors)
-
-
-def files__add() -> int:
-    print("\nerror: not implemented", file=stderr)
-    return 1
-
-
-def files__remove() -> int:
-    print("\nerror: not implemented", file=stderr)
-    return 1
-
-
-def files__rm() -> int:
-    return files__remove()
-
-
-def files__del() -> int:
-    return files__remove()
-
-
-def files__delete() -> int:
-    return files__remove()
 
 
 def files__list() -> int:
@@ -694,7 +956,7 @@ def files__status() -> int:
         print("warning: lockfile could not be updated", file=stderr)
 
     missing_lockfile_entries: list[File] = []
-    files_resolution_errors: dict[File, str] = {}
+    files_resolution_errors: FilesWithMessages = {}
     files_same: int = 0
     files_different: int = 0
     files_errors: int = 0
@@ -858,11 +1120,28 @@ def files__status() -> int:
 def files__lock() -> int:
     f"""forcefully creates a lockfile at `{LOCKFILE_PATH}`"""
     files = MSTFileManager()
-    lockfile = MSTLockfile()
+    repofs = RepositoryFileState.from_repo().get()
+    result_hash = files.mass_resolve_corresponding_git_hashes(repofs)
 
+    # there was a critical error resolving git hashes
+    if not result_hash:
+        print(
+            f"\nerror: could not resolve git hashes for repository files ({result_hash.cry(string=True)})"
+        )
+        return 1
+
+    # there were errors resolving git hashes
+    hash_resolution_errors = result_hash.get()
+    if hash_resolution_errors:
+        print("\nerror: could not resolve some git hashes for repository files")
+        for file_path, error in hash_resolution_errors.items():
+            print(f" ... {file_path}: {error}")
+        return 1
+
+    lockfile = MSTLockfile()
     for virt_file, real_file in files.virt_real_mapping.items():
-        lockfile[virt_file.path] = virt_file.dump_single_lock_data().get()
-        lockfile[real_file.path] = real_file.dump_single_lock_data().get()
+        lockfile[virt_file.path] = virt_file.dump_single_lock_data(repofs).get()
+        lockfile[real_file.path] = real_file.dump_single_lock_data(repofs).get()
 
     written = lockfile.dump_to_repo()
     print("\nupdated lockfile!")
@@ -870,7 +1149,56 @@ def files__lock() -> int:
 
 
 def files__sync() -> int:
-    print("\nerror: not implemented", file=stderr)
+    files = MSTFileManager()
+
+    try:
+        lockfile, _ = MSTLockfile.load_from_repo(prune_dangling_entries=False)
+        print(" -> loaded lockfile", file=stderr)
+
+    except Exception as exc:
+        print(
+            f"\nerror: lockfile could not be loaded ({exc.__class__.__name__}: {exc})",
+            f"run `{orig_argv[0]} {orig_argv[1]} files lock` to generate a new lockfile",
+            file=stderr,
+            sep="\n",
+        )
+        return 1
+
+    if not (result_verify := lockfile.verify(files=files.as_list())):
+        print(
+            f"\nerror: lockfile verification failed (error: {result_verify.cry(string=True)})",
+            file=stderr,
+        )
+        return 1
+
+    elif len(result_verify.get().missing) + len(result_verify.get().unresolved):
+        real_files: list[Path] = [f.path for f in MSTFileManager.virt_real_mapping.values()]
+        real_files_with_corresponding_git_hashes: int = len(real_files)
+
+        print("\nerror: there are errors in the lockfile", file=stderr)
+        for _, message in result_verify.get().missing.items():
+            print(f" ... {message}", file=stderr)
+        for file_path, message in result_verify.get().unresolved.items():
+            print(f" ... {message}", file=stderr)
+            if file_path in real_files:
+                real_files_with_corresponding_git_hashes -= 1
+
+        final_message: str = f"\nrun `{orig_argv[0]} {orig_argv[1]} files lock` to generate a new lockfile"
+        
+        if real_files_with_corresponding_git_hashes == 0:
+            final_message = (
+                "\nerror: no real files have corresponding git hashes"
+                + f"\nconsider forcefully setting (overriding) all files with `{orig_argv[0]} {orig_argv[1]} files set`"
+            )
+        
+        elif real_files_with_corresponding_git_hashes < len(real_files):
+            final_message = (
+                "\nerror: some real files are missing corresponding git hashes"
+                + f"\nconsider setting (overriding) any differing files with `{orig_argv[0]} {orig_argv[1]} status` and `files set <path/to/file>`"
+            )
+
+        print(final_message, file=stderr)
+
     return 1
 
 
@@ -1048,6 +1376,14 @@ def install() -> int:
 
 def main() -> int:
     """command line entry point"""
+    
+    # prelude: ensure python 3.13 or higher
+    if (version_info < (3, 13)) and ("--idonotcare" not in orig_argv):
+        print(
+            "error: this script requires python 3.13 or higher (override with `--idonotcare`)",
+            file=stderr,
+        )
+        return 1
 
     subcommand_mappings: dict[str, dict[str, Callable[[], int]]] = {}
 
