@@ -62,5 +62,5 @@ my {root,dot,home}files
 an example of using it whilst installing gentoo:
 
 ```text
-sudo SYSTEMSET_PREFIX="/mnt/gentoo" SYSTEMSET_USER="majo" python3 tooling.py files set
+sudo MST_PREFIX="/mnt/gentoo" MST_USER="majo" python3 tooling.py files set
 ```
