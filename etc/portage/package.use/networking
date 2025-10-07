@@ -1,0 +1,2 @@
+net-misc/networkmanager tools iwd wifi bluetooth modemmanager -ppp -ofono -wext -connection-sharing
+net-wireless/wpa_supplicant dbus

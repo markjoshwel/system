@@ -70,13 +70,9 @@ cp /boot/vmlinuz-* /efi/EFI/Gentoo/vmlinuz
 
 # --- (6/10) The Linux kernel is installed. ---
 
-# https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/System#Network
-emerge net-misc/dhcpcd
-rc-update add dhcpcd default
-rc-service dhcpcd start
+# already done before chrooting via tooling.py
 
-# networking
-emerge net-wireless/iw net-wireless/wpa_supplicant
+# --- (7/10) Most of the Gentoo system configuration files are created. ---
 
 # https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Tools
 
@@ -93,8 +89,30 @@ rc-update add chronyd default
 emerge sys-fs/dosfstools sys-fs/ntfs3g
 
 # users
+cp /etc/skel/.* /home/majo
 useradd -m -G users,wheel,audio -s /bin/bash majo
 passwd majo
 
 # delete the root password and disable login
 passwd -dl root
+
+# elogind
+emerge sys-auth/elogind
+rc-update add elogind boot
+
+# laptop
+emerge sys-power/tlp
+rc-update add tlp default
+
+# wireless connectivity
+emerge net-misc/networkmanager net-wireless/bluez
+rc-update add bluetooth default
+rc-update add NetworkManager default
+
+# --- (8/10) The necessary system tools are installed.  ---
+
+# install rEFInd to {ESP}/EFI/refind
+
+# --- (9/10) The proper boot loader has been installed and configured. ---
+
+# --- (10/10) The freshly installed Gentoo Linux environment is ready to be explored. ---
