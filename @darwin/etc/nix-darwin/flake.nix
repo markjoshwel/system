@@ -1,5 +1,5 @@
 {
-  description = "Example nix-darwin system flake";
+  description = "mark's nix-darwin system flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -19,7 +19,7 @@
           pkgs.uv
           pkgs.fish
           pkgs.nushell
-          pkgs.python3
+          pkgs.python313
           pkgs.ffmpeg
           pkgs.nixd
           pkgs.nil
