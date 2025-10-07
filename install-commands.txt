@@ -42,11 +42,20 @@ emerge sys-libs/timezone-data
 # --- (5/10) Core packages, which are the same on all Gentoo installations, are installed. ---
 
 emerge sys-kernel/gentoo-sources
-emerge sys-apps/pciutils
+emerge app-arch/zstd
+
+(cd /usr/src/linux*; make -j16 -l16 && make modules_install)
+ln -s /usr/src/linux* /usr/src/linux
 
 # the Ryzen 9 6900HS is a AMD Rembrandt apu
 # https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Kernel#Optional:_Installing_firmware_and.2For_microcode
-emerge sys-kernel/linux-firmware
-emerge sys-firmware/sof-firmware
+emerge sys-kernel/linux-firmware sys-firmware/sof-firmware
+
+# install cryptsetup and btrfs-progs before initramfs creation
+# https://wiki.gentoo.org/wiki/Rootfs_encryption#Gentoo_installation
+emerge sys-kernel/ugrd dev-python/zstandard
+emerge sys-fs/cryptsetup sys-fs/btrfs-progs
+
+(cd /usr/src/linux; ugrd --kver `make kernelversion`-majorette)
 
 # --- (6/10) The Linux kernel is installed. ---

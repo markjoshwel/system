@@ -1,0 +1,3 @@
+dependencies = [ "/boot/amd-uc.img" ]
+musl_libc = true
+cpio_compression = "zstd"
