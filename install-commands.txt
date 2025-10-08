@@ -109,6 +109,9 @@ emerge net-misc/networkmanager net-wireless/bluez
 rc-update add bluetooth default
 rc-update add NetworkManager default
 
+# shell
+emerge app-shells/dash app-alternatives/sh
+
 # --- (8/10) The necessary system tools are installed.  ---
 
 # install rEFInd to {ESP}/EFI/refind
