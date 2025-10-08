@@ -1,2 +1,51 @@
+# /etc/conf.d/dmcrypt
+
+# For people who run dmcrypt on top of some other layer (like raid),
+# use rc_need to specify that requirement.  See the runscript(8) man
+# page for more information.
+
+dmcrypt_key_timeout=1
+#dmcrypt_max_timeout=300
+dmcrypt_retries=5
+
+# Arguments:
+#-----------
+# target=<name>                      == Mapping name for partition.
+# swap=<name>                        == Mapping name for swap partition.
+# source='<dev>'                     == Real device for partition.
+#                                    Note: You can (and should) specify a tag like UUID
+#                                    for blkid (see -t option).  This is safer than using
+#                                    the full path to the device.
+# key='</path/to/keyfile>[:<mode>]'  == Fullpath from / or from inside removable media.
+# header='</path/to/header>'         == Full path to detached LUKS header file.
+# remdev='<dev>'                     == Device that will be assigned to removable media.
+# gpg_options='<opts>'               == Default are --quiet --decrypt
+# options='<opts>'                   == cryptsetup, for LUKS you can only use --readonly
+# loop_file='<file>'                 == Loopback file.
+#                                    Note: If you omit $source, then a free loopback will
+#                                    be looked up automatically.
+# pre_mount='cmds'                   == commands to execute before mounting partition.
+# post_mount='cmds'                  == commands to execute after mounting partition.
+# wait=5                             == wait given amount of seconds for source or
+#                                       detached header file appear.
+#-----------
+# Supported Modes
+# gpg					== decrypt and pipe key into cryptsetup.
+#						Note: new-line character must not be part of key.
+#						Command to erase \n char: 'cat key | tr -d '\n' > cleanKey'
+
+#--------------------
+# dm-crypt examples
+#--------------------
+
+## swap
+# Swap partitions. These should come first so that no keys make their
+# way into unencrypted swap.
+# If no options are given, they will default to: -c aes -h sha1 -d /dev/urandom
+# If no makefs is given then mkswap will be assumed
+swap=crypt-swap
+source=UUID=05fd15ba-79db-4e2f-8265-1afd09c012a9
+
+# / with passphrase
 target=root
 source=UUID="07abad04-6ca3-447e-a3b9-39b132355e8d"

@@ -1,3 +1,14 @@
-dependencies = [ "/boot/amd-uc.img" ]
+# By default, all kmod categories are ignored. This can be disabled by category
+# Modules can define these options if needed, and users should not need to set them
+# In most cases, kmods in these categories are not needed to boot the system
+#kmod_ignore_video = false
+#kmod_ignore_sound = false
+#kmod_ignore_network = false
+
+# The initramfs will be built in /tmp/initramfs if "build_dir" is not specified not specified
+#out_dir = "/usr/src/initramfs"
+#out_dir = "/boot"
+
+cpio_compression = "zstd"  # Use zstd compression
+kmod_autodetect_lspci = true
 musl_libc = true
-cpio_compression = "zstd"
